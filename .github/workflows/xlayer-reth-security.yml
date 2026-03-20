@@ -7,7 +7,7 @@ on:
         required: true
       anthropic_api_key:
         required: true
-      token:
+      github_token:
         required: true
 
 jobs:
@@ -121,7 +121,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_SECURITY_PAT }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep"
           show_full_output: true
           prompt: |
