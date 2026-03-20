@@ -3,8 +3,10 @@ name: Claude Code
 on:
   workflow_call:
     secrets:
-      token:
-        required: true
+      anthropic_api_key:
+        required: false
+      github_token:
+        required: false
 
 concurrency:
   group: claude-${{ github.event.pull_request.number || github.event.issue.number }}
