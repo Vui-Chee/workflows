@@ -1,9 +1,12 @@
 name: Create Jira ticket on failure
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  workflow_call:
+    secrets:
+      anthropic_api_key:
+        required: true
+      jira-token:
+        required: true
 
 jobs:
   create-ticket:
