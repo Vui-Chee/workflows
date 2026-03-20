@@ -1,9 +1,12 @@
 name: Dependabot Security Fix
 
 on:
-  schedule:
-    - cron: '0 9 * * 1'  # Run once per week on Monday at 9 AM UTC
-  workflow_dispatch:      # Allow manual triggering for testing
+  workflow_call:
+    secrets:
+      anthropic_api_key:
+        required: false
+      token:
+        required: false
 
 jobs:
   check-and-fix-security:
