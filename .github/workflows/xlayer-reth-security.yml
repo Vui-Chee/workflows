@@ -138,22 +138,31 @@ jobs:
 
             2. Check `first_patched` — this is the minimum safe version. If it is null, skip.
 
-            3. Confirm the bump stays within the same major version (semver-compatible). If it
-               crosses a major version boundary, skip.
-
-            4. Apply the fix on a new branch:
+            3. Create a new branch and attempt the upgrade even if it crosses a major version
+               boundary or a transitive dependency chain blocks the direct update:
                ```
                git checkout ${{ github.event.repository.default_branch }}
                git pull origin ${{ github.event.repository.default_branch }}
                git checkout -b fix/security-<package>-<number>
                ```
-               - Direct dep: edit the version in `Cargo.toml`
+               - Direct dep: edit the version constraint in `Cargo.toml`
                - Transitive dep: run `cargo update <package> --precise <first_patched>`
+               - If `cargo update` fails because an intermediary crate pins an older version,
+                 identify that intermediary crate and try upgrading it to a version that accepts
+                 the patched release. Update `Cargo.toml` and re-run `cargo update`.
 
-            5. Verify: `cargo check --workspace 2>&1 | tail -20`
-               If it fails, `git checkout .` and skip this alert.
+            4. After the version bump, run `cargo check --workspace 2>&1` to see if there are
+               compilation errors. If there are errors:
+               a. Read each error carefully. For straightforward API changes (renamed types,
+                  moved modules, changed function signatures, added/removed trait bounds, etc.)
+                  edit the affected source files to adapt the call sites.
+               b. Re-run `cargo check --workspace 2>&1` after each batch of fixes.
+               c. Repeat until either the build succeeds or you determine the changes are too
+                  invasive (e.g. require rewriting core logic, affect more than ~10 files, or
+                  require deep domain knowledge you cannot infer from the compiler errors and
+                  crate changelogs).
 
-            6. Commit, push, and open a PR:
+            5. If the build succeeds, commit, push, and open a PR:
                ```
                git add -A
                git commit -m "fix(deps): update <package> to <first_patched> (<cve>)"
@@ -174,7 +183,7 @@ jobs:
                - **Fixed in**: <first_patched>
 
                ## Change
-               <what was changed>
+               <what was changed, including any API adaptation in source files>
 
                ## Checklist
                - [x] I have reviewed the relevant code guidelines in the \`docs/\` folder
@@ -183,9 +192,15 @@ jobs:
                  --base ${{ github.event.repository.default_branch }}
                ```
 
-            Skip an alert (with a note) if: `first_patched` is null, the fix crosses a major
-            version boundary, `cargo check` fails, or you are not confident.
+            Only skip an alert (with a clear note explaining what was tried and why it was
+            abandoned) if:
+            - `first_patched` is null
+            - The upgrade requires rewriting more than ~10 source files
+            - The breaking changes require deep domain-specific logic you cannot safely infer
+              from compiler errors alone
+            - The intermediary crate chain is too deep to unblock without a large coordinated
+              upgrade
 
             Print a short summary table when done:
-            | Alert # | Package | Severity | Result |
-            |---------|---------|----------|--------|
+            | Alert # | Package | Severity | Result | Notes |
+            |---------|---------|----------|--------|-------|
