@@ -169,6 +169,7 @@ jobs:
                git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:fix/security-<package>-<number>
                gh pr create \
                  --title "fix(deps): update <package> to <first_patched> (<severity> <cve>)" \
+                 --reviewer "vui-chee,JimmyShi22" \
                  --body "## Description
                Bumps **<package>** to resolve a <severity> severity vulnerability.
 
