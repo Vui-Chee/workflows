@@ -15,8 +15,7 @@ concurrency:
 jobs:
   authorize:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    permissions: {}
     outputs:
       authorized: ${{ steps.check.outputs.authorized }}
     if: |
@@ -26,42 +25,29 @@ jobs:
         (github.event.action == 'opened' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
       )
     steps:
-      - name: Checkout workflows repo
-        uses: actions/checkout@v4
-        with:
-          repository: Vui-Chee/workflows
-          ref: master
-
       - name: Check actor authorization
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.token }}
         run: |
-          ASSOCIATION="${{ github.event.comment.author_association || github.event.review.author_association || github.event.issue.author_association }}"
           PR_AUTHOR="${{ github.event.issue.user.login }}"
           if [ -z "$PR_AUTHOR" ]; then
             PR_AUTHOR="${{ github.event.pull_request.user.login }}"
           fi
           ACTOR="${{ github.actor }}"
-          echo "Author association: $ASSOCIATION"
           echo "PR/Issue author: $PR_AUTHOR"
           echo "Triggered by: $ACTOR"
-          IS_MEMBER=false
-          if [[ "$ASSOCIATION" == "OWNER" || "$ASSOCIATION" == "MEMBER" || "$ASSOCIATION" == "COLLABORATOR" ]]; then
-            IS_MEMBER=true
-          fi
-          if grep -qx "$ACTOR" .github/members.txt; then
-            IS_MEMBER=true
-          fi
-          if [[ "$IS_MEMBER" == "false" ]]; then
-            echo "Unauthorized: '$ACTOR' is not an org member (association: '$ASSOCIATION') and not in members.txt"
+          if ! gh api repos/okx/xlayer-reth/collaborators --paginate --jq '.[].login' | grep -qx "$ACTOR"; then
+            echo "Unauthorized: '$ACTOR' is not a collaborator of okx/xlayer-reth"
             echo "authorized=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "Authorized: '$ACTOR' is a collaborator"
           if [[ "$ACTOR" != "$PR_AUTHOR" ]]; then
             echo "Unauthorized: '$ACTOR' is not the PR/issue author ('$PR_AUTHOR')"
             echo "authorized=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "Authorized: '$ACTOR' (association: '$ASSOCIATION')"
           echo "authorized=true" >> "$GITHUB_OUTPUT"
 
   claude:
