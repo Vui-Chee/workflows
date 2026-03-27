@@ -21,7 +21,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      security-events: read
 
     steps:
       - name: Checkout repository
@@ -33,52 +32,80 @@ jobs:
       - name: Fetch top highest-risk Dependabot alerts
         id: alerts
         env:
-          # Use a distinct name to avoid collision with the GH_TOKEN that the Actions
-          # runner pre-sets for the gh CLI (pointing at GITHUB_TOKEN). The PAT is then
-          # applied inline on the gh command so it always wins.
-          # Requires a fine-grained PAT with "Dependabot alerts: Read" permission.
+          # Requires a classic PAT with 'repo' scope, or any token with repo access.
+          # GraphQL vulnerabilityAlerts works without security_events scope.
           GH_TOKEN: ${{ secrets.gh_pat }}
           # Needed for listing PRs (pull-requests: write is granted in the permissions block).
-          # GH_SECURITY_PAT only has Dependabot alerts read access, not PR access.
           WORKFLOW_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "::error::GH_SECURITY_PAT secret is not set. Add a fine-grained PAT with 'Dependabot alerts: Read' permission."
+            echo "::error::GH_SECURITY_PAT secret is not set. Add a classic PAT with 'repo' scope."
             exit 1
           fi
 
-          if gh api "repos/${{ github.repository }}/dependabot/alerts" \
-            --method GET --paginate -f state=open > /tmp/alerts_raw.json; then
-              echo "Successfully fetched dependabot alerts"
-          else
-            echo "Error: Failed to fetch dependabot alerts" >&2
-          fi
+          REPO_OWNER=$(echo "${{ github.repository }}" | cut -d'/' -f1)
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
 
-          # Keep low/medium/high/critical, sort by severity (critical=0, high=1, medium=2, low=3).
-          # No limit yet — existing open PRs are filtered out below before taking top 2.
+          # Use GraphQL — works with 'repo' scope alone, unlike the REST /dependabot/alerts
+          # endpoint which silently returns [] without the security_events scope.
           # Written to a file — never interpolated into the Claude prompt — to prevent prompt injection.
-          jq '[
-            .[] |
-            select(.security_advisory.severity | ascii_downcase | IN("critical","high","medium","low")) |
+          RESPONSE=$(curl -sS \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/graphql \
+            -d "$(jq -n \
+              --arg owner "$REPO_OWNER" \
+              --arg name "$REPO_NAME" \
+              --arg query 'query($owner: String!, $name: String!) {
+                repository(owner: $owner, name: $name) {
+                  vulnerabilityAlerts(first: 100, states: OPEN) {
+                    nodes {
+                      number
+                      vulnerableManifestPath
+                      securityVulnerability {
+                        package { name }
+                        vulnerableVersionRange
+                        firstPatchedVersion { identifier }
+                        advisory {
+                          ghsaId summary severity
+                          identifiers { type value }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' \
+              '{query: $query, variables: {owner: $owner, name: $name}}')")
+
+          if echo "$RESPONSE" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::error::GraphQL error: $(echo "$RESPONSE" | jq -r '.errors[].message')" >&2
+            exit 1
+          fi
+          echo "Successfully fetched dependabot alerts"
+
+          # Transform GraphQL response into the flat format used downstream.
+          # Sort by severity (critical=0, high=1, medium=2, low=3).
+          echo "$RESPONSE" | jq --arg repo "${{ github.repository }}" '[
+            .data.repository.vulnerabilityAlerts.nodes[] |
             {
               number:          .number,
-              package:         .dependency.package.name,
-              manifest_path:   .dependency.manifest_path,
-              severity:        .security_advisory.severity,
-              summary:         .security_advisory.summary,
-              vulnerable_range:.security_vulnerability.vulnerable_version_range,
-              first_patched:   .security_vulnerability.first_patched_version.identifier,
-              cve:             (.security_advisory.cve_id // .security_advisory.ghsa_id),
-              url:             .html_url,
+              package:         .securityVulnerability.package.name,
+              manifest_path:   .vulnerableManifestPath,
+              severity:        (.securityVulnerability.advisory.severity | ascii_downcase),
+              summary:         .securityVulnerability.advisory.summary,
+              vulnerable_range:.securityVulnerability.vulnerableVersionRange,
+              first_patched:   .securityVulnerability.firstPatchedVersion.identifier,
+              cve:             ((.securityVulnerability.advisory.identifiers | map(select(.type == "CVE")) | first | .value) // .securityVulnerability.advisory.ghsaId),
+              url:             ("https://github.com/" + $repo + "/security/dependabot/" + (.number | tostring)),
               severity_rank: (
-                .security_advisory.severity | ascii_downcase |
+                .securityVulnerability.advisory.severity | ascii_downcase |
                 if . == "critical" then 0
                 elif . == "high"   then 1
                 elif . == "medium" then 2
                 else                    3 end
               )
             }
-          ] | sort_by(.severity_rank)' /tmp/alerts_raw.json > /tmp/alerts_all.json
+          ] | sort_by(.severity_rank)' > /tmp/alerts_all.json
 
           # Collect branch names of open security PRs.
           # Use GITHUB_TOKEN here — GH_SECURITY_PAT only has Dependabot alerts read access
