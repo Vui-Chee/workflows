@@ -154,6 +154,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_SECURITY_PAT }}
           JIRA_AUTH: ${{ secrets.jira_auth }}
           JIRA_ACCOUNT_ID: ${{ secrets.jira_account_id }}
+          JIRA_DOMAIN: ${{ secrets.jira_domain }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
