@@ -59,19 +59,11 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep"
 
-
-  # notify-result:
-  #   if: ${{ always() }}
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: POST success callback
-  #       run: |
-  #         curl -X POST "$CALLBACK_URL" \
-  #           -H "Content-Type: application/json" \
-  #           -d '{
-  #             "workflow": "Build",
-  #             "run_id": "'"${{ github.event.workflow_run.id }}"'",
-  #             "conclusion": "success"
-  #           }'
-  #       env:
-  #         CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+      - name: Post result as comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ inputs.gh_pat }}
+        run: |
+          gh issue comment ${{ inputs.pr_number }} \
+            --repo ${{ inputs.owner }}/${{ inputs.repo }} \
+            --body "${{ steps.claude.outputs.response }}"
