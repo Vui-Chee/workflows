@@ -11,6 +11,26 @@ on:
         required: false
       gh_pat:
         required: false
+  workflow_dispatch:
+    inputs:
+      owner:
+        required: true
+        type: string
+      repo:
+        required: true
+        type: string
+      pr_number:
+        required: true
+        type: string
+      head_sha:
+        required: true
+        type: string
+      comment_body:
+        required: false
+        type: string
+      anthropic_api_key:
+        required: false
+        type: string
 
 concurrency:
   group: claude-${{ github.event.pull_request.number || github.event.issue.number }}
