@@ -55,12 +55,6 @@ jobs:
           ACTOR="${{ github.actor }}"
           echo "PR/Issue author: $PR_AUTHOR"
           echo "Triggered by: $ACTOR"
-          if ! gh api orgs/okx/teams/blockchain-members/memberships/$ACTOR --silent 2>/dev/null; then
-            echo "Unauthorized: '$ACTOR' is not a member of blockchain-members team"
-            echo "authorized=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "Authorized: '$ACTOR' is a member of blockchain-members team"
           echo "authorized=true" >> "$GITHUB_OUTPUT"
 
   # notify-result:
