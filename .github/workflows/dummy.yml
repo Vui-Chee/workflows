@@ -1,0 +1,44 @@
+name: Dummy
+
+on:
+  workflow_call:
+    secrets:
+      anthropic_api_key:
+        required: false
+      token:
+        required: true
+      org_read_token:
+        required: false
+      gh_pat:
+        required: false
+
+concurrency:
+  group: claude-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      authorized: ${{ steps.check.outputs.authorized }}
+    steps:
+      - name: Check actor authorization
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.org_read_token }}
+        run: |
+          PR_AUTHOR="${{ github.event.issue.user.login }}"
+          if [ -z "$PR_AUTHOR" ]; then
+            PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          fi
+          ACTOR="${{ github.actor }}"
+          echo "PR/Issue author: $PR_AUTHOR"
+          echo "Triggered by: $ACTOR"
+          if ! gh api orgs/okx/teams/blockchain-members/memberships/$ACTOR --silent 2>/dev/null; then
+            echo "Unauthorized: '$ACTOR' is not a member of blockchain-members team"
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Authorized: '$ACTOR' is a member of blockchain-members team"
+          echo "authorized=true" >> "$GITHUB_OUTPUT"
