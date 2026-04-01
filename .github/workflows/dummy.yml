@@ -43,13 +43,13 @@ jobs:
           fetch-depth: 1
           repository: ${{ inputs.owner }}/${{ inputs.repo }}
           ref: ${{ inputs.head_sha }}
-          token: ${{ secrets.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ secrets.gh_pat }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           anthropic_api_key: ${{ inputs.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
