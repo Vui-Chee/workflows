@@ -58,6 +58,7 @@ jobs:
           anthropic_api_key: ${{ inputs.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep"
+          show_full_output: true
 
       - name: Post result as comment
         if: always()
