@@ -4,7 +4,7 @@ on:
   workflow_call:
     secrets:
       anthropic_api_key:
-        required: false
+        required: true
       token:
         required: true
       org_read_token:
