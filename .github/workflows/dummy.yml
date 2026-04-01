@@ -2,15 +2,6 @@ name: Dummy
 
 on:
   workflow_call:
-    secrets:
-      anthropic_api_key:
-        required: true
-      token:
-        required: true
-      org_read_token:
-        required: false
-      gh_pat:
-        required: false
   workflow_dispatch:
     inputs:
       owner:
@@ -37,25 +28,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  authorize:
+  claude:
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
     runs-on: ubuntu-latest
-    permissions: {}
-    outputs:
-      authorized: ${{ steps.check.outputs.authorized }}
     steps:
-      - name: Check actor authorization
-        id: check
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          repository: ${{ inputs.owner }}/${{ inputs.repo }}
+          ref: ${{ inputs.head_sha }}
+          token: ${{ secrets.token }}
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ secrets.org_read_token }}
-        run: |
-          PR_AUTHOR="${{ github.event.issue.user.login }}"
-          if [ -z "$PR_AUTHOR" ]; then
-            PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-          fi
-          ACTOR="${{ github.actor }}"
-          echo "PR/Issue author: $PR_AUTHOR"
-          echo "Triggered by: $ACTOR"
-          echo "authorized=true" >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ secrets.gh_pat }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep"
+
 
   # notify-result:
   #   if: ${{ always() }}
