@@ -46,7 +46,7 @@ jobs:
           fetch-depth: 1
           repository: ${{ inputs.owner }}/${{ inputs.repo }}
           ref: ${{ inputs.head_sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ inputs.gh_pat }}
 
       - name: Run Claude Code
         id: claude
