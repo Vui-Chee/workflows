@@ -37,20 +37,17 @@ jobs:
           fetch-depth: 1
           repository: ${{ inputs.owner }}/${{ inputs.repo }}
           ref: ${{ inputs.head_sha }}
-          token: ${{ inputs.gh_pat }}
+          token: ${{ secrets.GH_TOKEN }}
           
       - name: Run CI based on repo
         id: agentic-ci
         uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ inputs.gh_pat }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
           prompt: |
             Repository: ${{ inputs.owner }}/${{ inputs.repo }}
             PR: #${{ inputs.pr_number }}
-      
-            User instruction (if any):
-            ${{ inputs.comment_body }}
       
             You are an agentic CI assistant.
       
@@ -119,8 +116,8 @@ jobs:
       
             Follow CLAUDE.md if present. Keep changes minimal and scoped.
       
-          anthropic_api_key: ${{ inputs.anthropic_api_key }}
-          github_token: ${{ inputs.gh_pat }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep"
           show_full_output: true
           
