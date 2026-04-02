@@ -120,5 +120,16 @@ jobs:
           github_token: ${{ secrets.GH_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep"
           show_full_output: true
-          
+
+      - name: Post result as comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          RESPONSE=$(jq -r '.[] | select(.type == "result") | .result' /home/runner/work/_temp/claude-execution-output.json)
+          if [ -n "$RESPONSE" ]; then
+            gh issue comment ${{ inputs.pr_number }} \
+              --repo ${{ inputs.owner }}/${{ inputs.repo }} \
+              --body "$RESPONSE"
+          fi
       # TODO: report to Lark?
