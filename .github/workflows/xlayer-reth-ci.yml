@@ -1,0 +1,76 @@
+name: XLayer Reth CI
+
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      owner:
+        required: true
+        type: string
+      repo:
+        required: true
+        type: string
+      pr_number:
+        required: true
+        type: string
+      head_sha:
+        required: true
+        type: string
+
+concurrency:
+    group: agentic-ci-${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
+    cancel-in-progress: false
+ 
+jobs:
+  basic-checks:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          repository: ${{ inputs.owner }}/${{ inputs.repo }}
+          ref: ${{ inputs.head_sha }}
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Free up disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+
+          # Remove unnecessary pre-installed software to free up space
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+          echo ""
+          echo "Disk space after cleanup:"
+          df -h
+
+      - name: Get Rust version from Cargo.toml
+        id: rust-version
+        run: |
+          RUST_VERSION=$(grep '^rust-version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          echo "Rust version from Cargo.toml: $RUST_VERSION"
+          echo "version=$RUST_VERSION" >> $GITHUB_OUTPUT
+
+      - uses: extractions/setup-just@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.rust-version.outputs.version }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: false
+
+# TODO: add git submodule update --init step
+
+      - name: Run sweep-check
+        id: sweep_check
+        continue-on-error: true
+        run: |
+          # Upstream flashblocks inner dependency reth-optimism-primitives does not
+          # specify feats reth-codec and serde-bincode-compat. So we skip.
+          just sweep-check
