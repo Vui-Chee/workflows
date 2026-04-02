@@ -18,8 +18,8 @@ on:
         type: string
 
 concurrency:
-  group: claude-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: false
+    group: agentic-ci-${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
+    cancel-in-progress: false
 
 jobs:
   run-ci-with-ai:
