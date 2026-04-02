@@ -104,14 +104,14 @@ jobs:
                  npm run build --if-present
       
             5. If formatting issues are found:
-               - Fix them automatically (e.g. run formatters without --check)
-               - Commit minimal changes if appropriate
+               - STOP immediately. Do not attempt to fix them.
+               - Report the formatting check output and exit.
       
-            6. If failures occur:
-               - Diagnose root cause
-               - Apply minimal fixes
-               - Re-run checks
-      
+            6. If ANY check fails (non-zero exit code):
+               - STOP immediately. Do not attempt to diagnose, fix, or re-run.
+               - Report the failing command, its exit code, and its full output.
+               - Do not run any further checks.
+
             7. Output:
                - Detected stacks
                - Commands run
