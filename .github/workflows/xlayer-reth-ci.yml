@@ -23,6 +23,10 @@ concurrency:
  
 jobs:
   basic-checks:
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
@@ -73,3 +77,28 @@ jobs:
           # Upstream flashblocks inner dependency reth-optimism-primitives does not
           # specify feats reth-codec and serde-bincode-compat. So we skip.
           just sweep-check
+
+      - name: Report result to PR
+        if: always() && inputs.pr_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            ICON=":white_check_mark:"
+            STATUS="passed"
+          else
+            ICON=":x:"
+            STATUS="failed"
+          fi
+
+          BODY="${ICON} **XLayer Reth CI ${STATUS}** for commit \`${{ inputs.head_sha }}\`
+
+          | Step | Result |
+          |------|--------|
+          | sweep-check | ${{ steps.sweep_check.outcome }} |
+
+          [View run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+
+          gh issue comment ${{ inputs.pr_number }} \
+            --repo ${{ inputs.owner }}/${{ inputs.repo }} \
+            --body "$BODY"
