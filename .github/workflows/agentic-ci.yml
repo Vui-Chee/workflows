@@ -56,6 +56,11 @@ jobs:
             You are an agentic CI assistant.
       
             Your task:
+
+            0. Check for git submodules:
+                - Run: cat .gitmodules 2>/dev/null || echo "No submodules"
+                - If submodules exist, run:
+                  git submodule update --init --recursive
       
             1. Determine the changed files for this PR using git.
                - Run:
