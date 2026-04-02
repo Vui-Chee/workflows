@@ -61,30 +61,43 @@ jobs:
             Your task:
 
             0. Check for git submodules:
-                - Run: cat .gitmodules 2>/dev/null || echo "No submodules"
-                - If submodules exist, run:
-                  git submodule update --init --recursive
+              - Run: cat .gitmodules 2>/dev/null || echo "No submodules"
+              - If submodules exist, run:
+                git submodule update --init --recursive
+
+            0.5. Check for build configuration files:
+              - Search for Makefile, justfile, or .justfile at root and depth 1:
+                find . -maxdepth 2 \( -name "Makefile" -o -name "justfile" -o -name ".justfile" \) 2>/dev/null
+              - For each found file, scan for relevant targets: fmt, format, lint, clippy, test, check, build
+              - Run commands from the directory containing the file, e.g.:
+                cd rust && just fmt
+              - Prefer these targets over raw commands. Pay attention to toolchain requirements:
+                - `cargo +nightly fmt` → install nightly: rustup toolchain install nightly
+                - `rustup component add rustfmt clippy --toolchain nightly` if needed
+              - If justfile is present, ensure `just` is installed:
+                just --version 2>/dev/null || cargo install just
+              - Use Makefile/justfile targets as source of truth.
+                Only fall back to raw commands if no relevant targets are found.
       
             1. Determine the changed files for this PR using git.
-               - Run:
-                 git fetch origin
-                 git diff --name-only origin/${{ github.base_ref }}...HEAD
+              - Run:
+                git fetch origin
+                git diff --name-only origin/${{ github.base_ref }}...HEAD
       
             2. Infer affected stacks:
-      
-               - Go → go.mod, *.go
-               - Rust → Cargo.toml, Cargo.lock, *.rs, rust/**
-               - Python → pyproject.toml, requirements.txt, poetry.lock, Pipfile.lock, *.py
-               - Node/TypeScript → package.json, lockfiles, tsconfig.json, *.js, *.jsx, *.ts, *.tsx
+              - Go → go.mod, *.go
+              - Rust → Cargo.toml, Cargo.lock, *.rs, rust/**
+              - Python → pyproject.toml, requirements.txt, poetry.lock, Pipfile.lock, *.py
+              - Node/TypeScript → package.json, lockfiles, tsconfig.json, *.js, *.jsx, *.ts, *.tsx
       
             3. Decide execution:
-               - One stack → run it
-               - Multiple stacks → run ALL
-               - Unclear → inspect repo
+              - One stack → run it
+              - Multiple stacks → run ALL
+              - Unclear → inspect repo
       
             4. For EACH selected stack:
-               - Ensure toolchain is installed
-               - Install dependencies if needed
+              - Ensure toolchain is installed
+              - Install dependencies if needed
       
                Then run BOTH formatting AND tests:
       
@@ -112,19 +125,19 @@ jobs:
                  npm run build --if-present
       
             5. If formatting issues are found:
-               - STOP immediately. Do not attempt to fix them.
-               - Report the formatting check output and exit.
+              - STOP immediately. Do not attempt to fix them.
+              - Report the formatting check output and exit.
       
             6. If ANY check fails (non-zero exit code):
-               - STOP immediately. Do not attempt to diagnose, fix, or re-run.
-               - Report the failing command, its exit code, and its full output.
-               - Do not run any further checks.
+              - STOP immediately. Do not attempt to diagnose, fix, or re-run.
+              - Report the failing command, its exit code, and its full output.
+              - Do not run any further checks.
 
             7. Output:
-               - Detected stacks
-               - Commands run
-               - Results
-               - Fixes applied
+              - Detected stacks
+              - Commands run
+              - Results
+              - Fixes applied
       
             Follow CLAUDE.md if present. Keep changes minimal and scoped.
       
