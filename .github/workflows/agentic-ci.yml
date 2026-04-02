@@ -1,4 +1,4 @@
-name: Dummy
+name: Agentic CI
 
 on:
   workflow_call:
