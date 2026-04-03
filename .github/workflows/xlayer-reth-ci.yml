@@ -96,8 +96,8 @@ jobs:
         id: node_check
         if: ${{ github.ref != env.DEFAULT_BRANCH }}
         run: |
-          # When running in PR, run this fast check.
-          cargo c -p xlayer-reth-node
+          # Helps check compile issues + precompiles for test. 
+          cargo test --workspace --no-run
 
       - name: Run sweep-check
         id: sweep_check
