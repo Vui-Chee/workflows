@@ -30,7 +30,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-    timeout-minutes: 60
+    timeout-minutes: 90
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -106,6 +106,7 @@ jobs:
 
       - name: Run tests
         id: test
+        timeout-minutes: 60
         run: |
           just test
 
