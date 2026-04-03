@@ -16,6 +16,9 @@ on:
       head_sha:
         required: true
         type: string
+      comment_body:
+        required: true
+        type: string
 
 concurrency:
   group: xlayer-reth-ai-${{ inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
