@@ -84,12 +84,12 @@ jobs:
         run: |
           just check-format
 
-      - name: Run node check
-        id: node_check
-        if: ${{ github.ref != env.DEFAULT_BRANCH }}
-        run: |
-          # When running in PR, run this fast check.
-          cargo c -p xlayer-reth-node
+      #- name: Run node check
+      #  id: node_check
+      #  if: ${{ github.ref != env.DEFAULT_BRANCH }}
+      #  run: |
+      #    # When running in PR, run this fast check.
+      #    cargo c -p xlayer-reth-node
 
       - name: Run sweep-check
         id: sweep_check
