@@ -28,7 +28,7 @@ jobs:
   basic-checks:
     permissions:
       contents: read
-    timeout-minutes: 90
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     outputs:
       format_check: ${{ steps.format_check.outcome }}
