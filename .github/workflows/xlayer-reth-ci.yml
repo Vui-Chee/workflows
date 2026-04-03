@@ -32,8 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       format_check: ${{ steps.format_check.outcome }}
-      node_check: ${{ steps.node_check.outcome }}
-      sweep_check: ${{ steps.sweep_check.outcome }}
+      compile_check: ${{ steps.compile_check.outcome }}
       clippy_check: ${{ steps.clippy_check.outcome }}
       test: ${{ steps.test.outcome }}
     steps:
@@ -92,20 +91,11 @@ jobs:
         run: |
           just check-format
 
-      - name: Run node check
-        id: node_check
-        if: ${{ github.ref != env.DEFAULT_BRANCH }}
+      - name: Run compile check
+        id: compile_check
         run: |
           # Helps check compile issues + precompiles for test. 
           cargo test --workspace --no-run
-
-      - name: Run sweep-check
-        id: sweep_check
-        if: ${{ github.ref == env.DEFAULT_BRANCH }}
-        run: |
-          # Upstream flashblocks inner dependency reth-optimism-primitives does not
-          # specify feats reth-codec and serde-bincode-compat. So we skip.
-          just sweep-check
 
       - name: Run clippy
         id: clippy_check
@@ -119,7 +109,8 @@ jobs:
 
   report:
     needs: [basic-checks]
-    if: ${{ always() && inputs.pr_number != '' }}
+    # Skip reporting on merging to default branch.
+    if: ${{ always() && inputs.pr_number != '' && github.ref != 'refs/heads/main' }}
     permissions:
       pull-requests: write
       issues: write
@@ -153,8 +144,7 @@ jobs:
           | Step | Result |
           |------|--------|
           | format-check | $(status_icon '${{ needs.basic-checks.outputs.format_check }}') |
-          | node-check   | $(status_icon '${{ needs.basic-checks.outputs.node_check }}') |
-          | sweep-check  | $(status_icon '${{ needs.basic-checks.outputs.sweep_check }}') |
+          | compile-check   | $(status_icon '${{ needs.basic-checks.outputs.compile_check }}') |
           | clippy       | $(status_icon '${{ needs.basic-checks.outputs.clippy_check }}') |
           | tests        | $(status_icon '${{ needs.basic-checks.outputs.test }}') |
 
