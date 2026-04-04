@@ -78,8 +78,8 @@ jobs:
       - name: Post result as comment
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          RESPONSE: ${{ needs.claude.outputs.response }}
         run: |
-          RESPONSE="${{ needs.claude.outputs.response }}"
           if [ -n "$RESPONSE" ]; then
             gh issue comment ${{ inputs.pr_number }} \
               --repo ${{ inputs.owner }}/${{ inputs.repo }} \
