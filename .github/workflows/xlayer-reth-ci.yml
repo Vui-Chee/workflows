@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
     timeout-minutes: 60
-    runs-on: xlayer-runner 
+    runs-on: ubuntu-latest
     outputs:
       format_check: ${{ steps.format_check.outcome }}
       compile_check: ${{ steps.compile_check.outcome }}
@@ -116,6 +116,35 @@ jobs:
       issues: write
     runs-on: ubuntu-latest
     steps:
+      - name: Set commit status on target repo
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          post_status() {
+            local context="$1"
+            local outcome="$2"
+            case "$outcome" in
+              success)   state="success" ;;
+              failure)   state="failure" ;;
+              cancelled) state="error"   ;;
+              *)         state="error"   ;;
+            esac
+
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              /repos/${{ inputs.owner }}/${{ inputs.repo }}/statuses/${{ inputs.head_sha }} \
+              -f state="$state" \
+              -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -f description="$context $state" \
+              -f context="xlayer-reth-ci / $context"
+          }
+
+          post_status "format-check"  "${{ needs.basic-checks.outputs.format_check }}"
+          post_status "compile-check" "${{ needs.basic-checks.outputs.compile_check }}"
+          post_status "clippy"        "${{ needs.basic-checks.outputs.clippy_check }}"
+          post_status "tests"         "${{ needs.basic-checks.outputs.test }}"
+
       - name: Report result to PR
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
