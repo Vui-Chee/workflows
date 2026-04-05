@@ -16,6 +16,9 @@ on:
       head_sha:
         required: true
         type: string
+      comment_body:
+        required: false
+        type: string
 
 env:
   DEFAULT_BRANCH: refs/heads/main
