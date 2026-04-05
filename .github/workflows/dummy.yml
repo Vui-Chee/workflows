@@ -21,18 +21,14 @@ on:
         type: string
 
 concurrency:
-  group: claude-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: false
+  group: dummy-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
 
 jobs:
-  claude:
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read
+  test:
     runs-on: ubuntu-latest
+    outputs:
+      dummy-ci: ${{ steps.dummy-ci.outcome }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -42,25 +38,39 @@ jobs:
           ref: ${{ inputs.head_sha }}
           token: ${{ secrets.GH_TOKEN }}
 
-      - name: Run Claude Code
-        id: claude
-        uses: anthropics/claude-code-action@v1
+      - name: Run CI 
+        id: dummy-ci
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          prompt: "Repository: ${{ inputs.owner }}/${{ inputs.repo }}, PR #${{ inputs.pr_number }}. ${{ inputs.comment_body }}"
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep"
-          show_full_output: true
-    
-      - name: Post result as comment
-        if: always()
+        run:
+          echo "Fake test!!!"
+   
+  report:
+    runs-on: ubuntu-latest
+    needs: ["test"]
+    steps:
+      - name: Set commit status on target repo
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          RESPONSE=$(jq -r '.[] | select(.type == "result") | .result' /home/runner/work/_temp/claude-execution-output.json)
-          if [ -n "$RESPONSE" ]; then
-            gh issue comment ${{ inputs.pr_number }} \
-              --repo ${{ inputs.owner }}/${{ inputs.repo }} \
-              --body "$RESPONSE"
-          fi
+          post_status() {
+            local context="$1"
+            local outcome="$2"
+            case "$outcome" in
+              success)   state="success" ;;
+              failure)   state="failure" ;;
+              cancelled) state="error"   ;;
+              *)         state="error"   ;;
+            esac
+
+            gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              /repos/${{ inputs.owner }}/${{ inputs.repo }}/statuses/${{ inputs.head_sha }} \
+              -f state="$state" \
+              -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -f description="$context $state" \
+              -f context="xlayer-reth-ci / $context"
+          }
+
+          post_status "basic-ci"  "${{ needs.test.outputs.dummy-ci }}"
