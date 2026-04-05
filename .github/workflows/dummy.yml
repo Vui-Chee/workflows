@@ -73,7 +73,6 @@ jobs:
               -f context="dummy-ci / $context"
           }
 
-          # Sleep first
-          sleep 3
+          gh api /repos/${{ inputs.owner }}/${{ inputs.repo }} --jq '.permissions'
 
           post_status "basic-ci"  "${{ needs.test.outputs.dummy-ci }}"
