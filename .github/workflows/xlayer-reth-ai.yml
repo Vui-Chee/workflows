@@ -36,6 +36,17 @@ jobs:
     outputs:
       response: ${{ steps.parse.outputs.response }}
     steps:
+      - name: Detect if PR or issue
+        id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if gh pr view ${{ inputs.pr_number }} --repo ${{ inputs.owner }}/${{ inputs.repo }} --json number >/dev/null 2>&1; then
+            echo "is_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -45,15 +56,58 @@ jobs:
           token: ${{ secrets.GH_TOKEN }}
           submodules: recursive
 
-      - name: Run Claude Code
-        id: claude
+      - name: Run Claude Code (PR with inline comments)
+        id: claude-pr
+        if: steps.detect.outputs.is_pr == 'true'
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         with:
-          prompt: "Repository: ${{ inputs.owner }}/${{ inputs.repo }}, PR #${{ inputs.pr_number }}.
+          prompt: |
+            Repository: ${{ inputs.owner }}/${{ inputs.repo }}, PR #${{ inputs.pr_number }}.
+            Before responding, use the Bash tool to run `gh pr view ${{ inputs.pr_number }} --repo ${{ inputs.owner }}/${{ inputs.repo }} --comments`
+            to read the full PR description and all previous comments as context.
+            Also run `gh pr diff ${{ inputs.pr_number }} --repo ${{ inputs.owner }}/${{ inputs.repo }}` to see the full diff.
+
+            Then address the following request: ${{ inputs.comment_body }}
+
+            IMPORTANT — Output format instructions:
+            Your final response MUST be a valid JSON object with this exact structure:
+            ```json
+            {
+              "summary": "A markdown summary of your overall review or response.",
+              "inline_comments": [
+                {
+                  "path": "relative/path/to/file.rs",
+                  "line": 42,
+                  "body": "Your comment about this specific line (markdown supported)."
+                }
+              ]
+            }
+            ```
+
+            Rules:
+            - "summary" is required and should contain your overall response/review in markdown.
+            - "inline_comments" is an array of file-specific comments. It can be empty [] if you have no file-specific feedback.
+            - "path" must be the file path relative to the repo root (matching the diff).
+            - "line" must be a line number in the NEW version of the file (right side of the diff).
+            - Each inline comment "body" should be self-contained and actionable.
+            - Do NOT wrap the JSON in any other text. Your entire response must be ONLY the JSON object.
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GH_TOKEN }}
+          claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep,WebFetch"
+          show_full_output: true
+
+      - name: Run Claude Code (issue)
+        id: claude-issue
+        if: steps.detect.outputs.is_pr == 'false'
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        with:
+          prompt: "Repository: ${{ inputs.owner }}/${{ inputs.repo }}, Issue #${{ inputs.pr_number }}.
           Before responding, use the Bash tool to run `gh issue view ${{ inputs.pr_number }} --repo ${{ inputs.owner }}/${{ inputs.repo }} --comments`
-          to read the full issue/PR description and all previous comments as context. Then address the following request: ${{ inputs.comment_body }}"
+          to read the full issue description and all previous comments as context. Then address the following request: ${{ inputs.comment_body }}"
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GH_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep,WebFetch"
@@ -62,8 +116,17 @@ jobs:
       - name: Parse Claude Response
         id: parse
         run: |
-          RESPONSE=$(jq -r '.[] | select(.type == "result") | .result' "${{ steps.claude.outputs.execution_file }}")
+          IS_PR="${{ steps.detect.outputs.is_pr }}"
+
+          if [ "$IS_PR" = "true" ]; then
+            EXEC_FILE="${{ steps.claude-pr.outputs.execution_file }}"
+          else
+            EXEC_FILE="${{ steps.claude-issue.outputs.execution_file }}"
+          fi
+
+          RESPONSE=$(jq -r '.[] | select(.type == "result") | .result' "$EXEC_FILE")
           {
+            echo "is_pr=$IS_PR"
             echo "response<<EOF"
             echo "$RESPONSE"
             echo "EOF"
@@ -77,13 +140,60 @@ jobs:
       issues: write
     runs-on: ubuntu-latest
     steps:
-      - name: Post result as comment
+      - name: Post inline review (PR)
+        if: needs.claude.outputs.response != '' && needs.claude.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           RESPONSE: ${{ needs.claude.outputs.response }}
+          IS_PR: ${{ needs.claude.outputs.is_pr }}
         run: |
-          if [ -n "$RESPONSE" ]; then
-            gh issue comment ${{ inputs.pr_number }} \
-              --repo ${{ inputs.owner }}/${{ inputs.repo }} \
+          if [ "$IS_PR" != "true" ]; then
+            # Issue: post a single comment
+            gh issue comment "${{ inputs.pr_number }}" \
+              --repo "${{ inputs.owner }}/${{ inputs.repo }}" \
+              --body "$RESPONSE"
+            exit 0
+          fi
+
+          # PR: try to parse structured JSON for inline comments
+          # First, try to extract JSON from the response (it may be wrapped in ```json blocks)
+          CLEAN_RESPONSE=$(echo "$RESPONSE" | sed -n '/^```json$/,/^```$/{ /^```/d; p }')
+          if [ -z "$CLEAN_RESPONSE" ]; then
+            CLEAN_RESPONSE="$RESPONSE"
+          fi
+
+          # Validate it's JSON with the expected structure
+          if echo "$CLEAN_RESPONSE" | jq -e '.summary' >/dev/null 2>&1; then
+            SUMMARY=$(echo "$CLEAN_RESPONSE" | jq -r '.summary')
+            INLINE_COUNT=$(echo "$CLEAN_RESPONSE" | jq '.inline_comments | length')
+
+            if [ "$INLINE_COUNT" -gt 0 ]; then
+              # Build the review payload with inline comments
+              REVIEW_BODY=$(echo "$CLEAN_RESPONSE" | jq '{
+                body: .summary,
+                event: "COMMENT",
+                comments: [.inline_comments[] | {
+                  path: .path,
+                  line: .line,
+                  side: "RIGHT",
+                  body: .body
+                }]
+              }')
+
+              # Post as a PR review with inline comments
+              echo "$REVIEW_BODY" | gh api \
+                "repos/${{ inputs.owner }}/${{ inputs.repo }}/pulls/${{ inputs.pr_number }}/reviews" \
+                --method POST \
+                --input -
+            else
+              # No inline comments, just post the summary as a PR comment
+              gh pr comment "${{ inputs.pr_number }}" \
+                --repo "${{ inputs.owner }}/${{ inputs.repo }}" \
+                --body "$SUMMARY"
+            fi
+          else
+            # Response isn't structured JSON — fall back to a plain comment
+            gh pr comment "${{ inputs.pr_number }}" \
+              --repo "${{ inputs.owner }}/${{ inputs.repo }}" \
               --body "$RESPONSE"
           fi
