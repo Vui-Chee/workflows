@@ -169,16 +169,20 @@ jobs:
 
             if [ "$INLINE_COUNT" -gt 0 ]; then
               # Build the review payload with inline comments
-              REVIEW_BODY=$(echo "$CLEAN_RESPONSE" | jq '{
-                body: .summary,
-                event: "COMMENT",
-                comments: [.inline_comments[] | {
-                  path: .path,
-                  line: .line,
-                  side: "RIGHT",
-                  body: .body
-                }]
-              }')
+              REVIEW_BODY=$(echo "$CLEAN_RESPONSE" | jq \
+                --arg commit_id "${{ inputs.head_sha }}" \
+                '{
+                  commit_id: $commit_id,
+                  body: .summary,
+                  event: "COMMENT",
+                  comments: [.inline_comments[] | {
+                    path: .path,
+                    line: .line,
+                    side: "RIGHT",
+                    subject_type: "line",
+                    body: .body
+                  }]
+                }')
 
               # Post as a PR review with inline comments
               echo "$REVIEW_BODY" | gh api \
