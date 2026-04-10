@@ -35,12 +35,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Post workflow run link
+        id: working_comment
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          gh issue comment ${{ inputs.pr_number }} \
+          COMMENT_ID=$(gh issue comment ${{ inputs.pr_number }} \
             --repo ${{ inputs.owner }}/${{ inputs.repo }} \
-            --body "🤖 Claude is working on this — [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            --body "🤖 Claude is working on this..." \
+            --json id --jq '.id')
+          echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -61,6 +64,8 @@ jobs:
           Before responding, use the Bash tool to run `gh issue view ${{ inputs.pr_number }} --repo ${{ inputs.owner }}/${{ inputs.repo }} --comments`
           to read the full issue/PR description and all previous comments as context. Then address the following request: ${{ inputs.comment_body }}
 
+          Always append the following line at the end of your response (whether it is an issue comment or a PR review summary): \"[workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\".
+
           IMPORTANT REVIEW INSTRUCTIONS:
           - If the request is a code review, before submitting any comments, spawn a subagent to validate each review point: for every issue you plan to raise, the subagent must verify that the concern is factually correct and actually applies to the code (e.g., the bug truly exists, the pattern is genuinely problematic, the suggestion is sound). The subagent should re-read the relevant code, check context, and confirm or refute each point. Discard any point the subagent cannot confirm, and adjust any point that is only partially correct. Only submit the validated points as inline PR review comments (not issue comments). Use the GitHub API via gh CLI to submit a pull request review with line-level comments on the relevant code sections.
           - If the request is a re-review or approval request, first fetch all existing review comments on the PR using `gh api repos/${{ inputs.owner }}/${{ inputs.repo }}/pulls/${{ inputs.pr_number }}/comments`. For each existing inline comment thread: check if the user has replied to or addressed the concern (by looking at the comment thread replies and the latest code diff). If the concern is resolved, resolve the thread by calling `gh api repos/${{ inputs.owner }}/${{ inputs.repo }}/pulls/comments/{comment_id}/replies` to acknowledge or use the GraphQL API to mark threads as resolved. If new issues are found, add new inline comments.
@@ -69,3 +74,11 @@ jobs:
           github_token: ${{ secrets.GH_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep,WebFetch"
           show_full_output: true
+
+      - name: Delete working comment
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          gh api --method DELETE \
+            repos/${{ inputs.owner }}/${{ inputs.repo }}/issues/comments/${{ steps.working_comment.outputs.comment_id }}
