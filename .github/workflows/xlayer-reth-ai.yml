@@ -41,7 +41,7 @@ jobs:
         run: |
           COMMENT_ID=$(gh issue comment ${{ inputs.pr_number }} \
             --repo ${{ inputs.owner }}/${{ inputs.repo }} \
-            --body "🤖 Claude is working on this..." \
+            --body "🤖 Claude is working on this — [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
             --json id --jq '.id')
           echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
 
