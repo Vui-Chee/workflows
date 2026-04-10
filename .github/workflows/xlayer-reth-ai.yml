@@ -33,8 +33,6 @@ jobs:
       id-token: write
       actions: read
     runs-on: ubuntu-latest
-    outputs:
-      response: ${{ steps.parse.outputs.response }}
     steps:
       - name: Post workflow run link
         env:
@@ -71,32 +69,3 @@ jobs:
           github_token: ${{ secrets.GH_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep,WebFetch"
           show_full_output: true
-
-      - name: Parse Claude Response
-        id: parse
-        run: |
-          RESPONSE=$(jq -r '.[] | select(.type == "result") | .result' "${{ steps.claude.outputs.execution_file }}")
-          {
-            echo "response<<EOF"
-            echo "$RESPONSE"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-  report:
-    needs: [claude]
-    if: ${{ always() && inputs.pr_number != '' }}
-    permissions:
-      pull-requests: write
-      issues: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Post result as comment
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          RESPONSE: ${{ needs.claude.outputs.response }}
-        run: |
-          if [ -n "$RESPONSE" ]; then
-            gh issue comment ${{ inputs.pr_number }} \
-              --repo ${{ inputs.owner }}/${{ inputs.repo }} \
-              --body "$RESPONSE"
-          fi
