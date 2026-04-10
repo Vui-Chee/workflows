@@ -39,10 +39,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          COMMENT_ID=$(gh issue comment ${{ inputs.pr_number }} \
-            --repo ${{ inputs.owner }}/${{ inputs.repo }} \
-            --body "🤖 Claude is working on this — [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
-            --json id --jq '.id')
+          COMMENT_ID=$(gh api repos/${{ inputs.owner }}/${{ inputs.repo }}/issues/${{ inputs.pr_number }}/comments \
+            --method POST \
+            -f body="🤖 Claude is working on this — [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+            --jq '.id')
           echo "comment_id=$COMMENT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
