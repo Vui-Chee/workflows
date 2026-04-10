@@ -64,12 +64,22 @@ jobs:
           Before responding, use the Bash tool to run `gh issue view ${{ inputs.pr_number }} --repo ${{ inputs.owner }}/${{ inputs.repo }} --comments`
           to read the full issue/PR description and all previous comments as context. Then address the following request: ${{ inputs.comment_body }}
 
-          Always append the following line at the end of your response (whether it is an issue comment or a PR review summary): \"[workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\".
-
           IMPORTANT REVIEW INSTRUCTIONS:
-          - If the request is a code review, before submitting any comments, spawn a subagent to validate each review point: for every issue you plan to raise, the subagent must verify that the concern is factually correct and actually applies to the code (e.g., the bug truly exists, the pattern is genuinely problematic, the suggestion is sound). The subagent should re-read the relevant code, check context, and confirm or refute each point. Discard any point the subagent cannot confirm, and adjust any point that is only partially correct. Only submit the validated points as inline PR review comments (not issue comments). Use the GitHub API via gh CLI to submit a pull request review with line-level comments on the relevant code sections.
-          - If the request is a re-review or approval request, first fetch all existing review comments on the PR using `gh api repos/${{ inputs.owner }}/${{ inputs.repo }}/pulls/${{ inputs.pr_number }}/comments`. For each existing inline comment thread: check if the user has replied to or addressed the concern (by looking at the comment thread replies and the latest code diff). If the concern is resolved, resolve the thread by calling `gh api repos/${{ inputs.owner }}/${{ inputs.repo }}/pulls/comments/{comment_id}/replies` to acknowledge or use the GraphQL API to mark threads as resolved. If new issues are found, add new inline comments.
-          - If all review comment threads are resolved and no new issues are found, submit an APPROVE review using `gh api repos/${{ inputs.owner }}/${{ inputs.repo }}/pulls/${{ inputs.pr_number }}/reviews` with event=APPROVE. Otherwise submit a REQUEST_CHANGES or COMMENT review with the remaining concerns."
+
+          ## How to post review feedback
+          - Always use inline PR review comments (NOT issue comments) for review feedback. Do NOT post a separate issue comment summarising the review — the inline review is sufficient.
+          - Submit the review via the GitHub REST API. At the end of the top-level review body (summary field), always append: \"[workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\".
+
+          ## First-time review
+          - Before submitting any comments, spawn a subagent to validate each review point: for every issue you plan to raise, the subagent must verify that the concern is factually correct and actually applies to the code (e.g., the bug truly exists, the pattern is genuinely problematic, the suggestion is sound). The subagent should re-read the relevant code and context, and confirm or refute each point. Discard any point the subagent cannot confirm, and adjust any point that is only partially correct. Only submit validated points.
+
+          ## Re-review or approval request
+          - Carefully read ALL comments on the PR since your last review, including the author's replies to your previous inline comments. If the author explains that a flagged issue is intentional design, an accepted trade-off, or otherwise not a bug, accept that explanation and do not repeat the concern — unless you have clear technical evidence that the explanation is incorrect.
+          - Fetch all unresolved inline review threads using GraphQL:
+            `gh api graphql -f query='{ repository(owner: \"${{ inputs.owner }}\", name: \"${{ inputs.repo }}\") { pullRequest(number: ${{ inputs.pr_number }}) { reviewThreads(first: 50) { nodes { id isResolved isOutdated comments(first: 10) { nodes { body author { login } } } } } } } }'`
+          - For each unresolved, non-outdated thread: determine whether the concern has been addressed in code or accepted by the author. If yes, resolve it via GraphQL:
+            `gh api graphql -f query='mutation { resolveReviewThread(input: { threadId: \"<id>\" }) { thread { isResolved } } }'`
+          - After resolving threads, if no new issues remain, submit an APPROVE review. Otherwise submit REQUEST_CHANGES listing only the still-open concerns."
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GH_TOKEN }}
           claude_args: "--allowedTools Bash,Read,Write,Edit,Glob,Grep,WebFetch"
