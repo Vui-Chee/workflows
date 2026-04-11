@@ -33,6 +33,8 @@ jobs:
       id-token: write
       actions: read
     runs-on: ubuntu-latest
+    outputs:
+      claude_failed: ${{ steps.claude.outcome == 'failure' }}
     steps:
       - name: Post workflow run link
         id: working_comment
@@ -92,3 +94,35 @@ jobs:
         run: |
           gh api --method DELETE \
             repos/${{ inputs.owner }}/${{ inputs.repo }}/issues/comments/${{ steps.working_comment.outputs.comment_id }}
+
+  notify-failure:
+    needs: claude
+    if: always() && needs.claude.outputs.claude_failed == 'true'
+    permissions:
+      issues: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Claude API status
+        id: claude_status
+        run: |
+          STATUS_JSON=$(curl -sf https://status.claude.com/api/v2/status.json || echo '{}')
+          INDICATOR=$(echo "$STATUS_JSON" | jq -r '.status.indicator // "unknown"')
+          DESCRIPTION=$(echo "$STATUS_JSON" | jq -r '.status.description // "Unknown"')
+          echo "indicator=$INDICATOR" >> "$GITHUB_OUTPUT"
+          echo "description=$DESCRIPTION" >> "$GITHUB_OUTPUT"
+
+      - name: Post failure comment
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          INDICATOR: ${{ steps.claude_status.outputs.indicator }}
+          DESCRIPTION: ${{ steps.claude_status.outputs.description }}
+        run: |
+          if [[ "$INDICATOR" != "none" && "$INDICATOR" != "unknown" ]]; then
+            BODY="❌ Claude Code failed to complete the request, and Claude API is currently reporting an incident: **${DESCRIPTION}** (indicator: \`${INDICATOR}\`). Check [status.claude.com](https://status.claude.com) and re-trigger once the service recovers. [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          else
+            BODY="❌ Claude Code failed to complete the request. Claude API status appears normal — please check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+          fi
+          gh api repos/${{ inputs.owner }}/${{ inputs.repo }}/issues/${{ inputs.pr_number }}/comments \
+            --method POST \
+            -f body="$BODY"
